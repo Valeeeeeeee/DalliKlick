@@ -6,11 +6,15 @@ import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.util.ArrayList;
 
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.SwingUtilities;
@@ -26,21 +30,47 @@ public class DalliKlick extends JFrame {
 	private static final int HEIGHT = 800;
 	
 	private static final Rectangle REC_EXIT = new Rectangle(20, 20, 150, 40);
-	private static final Rectangle REC_SET_IMAGE = new Rectangle(200, 20, 200, 40);
+	private static final Rectangle REC_CHOOSE_IMAGES = new Rectangle(200, 20, 200, 40);
 	private static final Rectangle REC_NEXT_POLYGON_TRANSPARENT = new Rectangle(430, 20, 200, 40);
+	private static final Rectangle REC_ALL_POLYGONS_TRANSPARENT = new Rectangle(650, 20, 200, 40);
+	private static final Rectangle REC_BACK_TO_LIST = new Rectangle(430, 20, 200, 40);
+	
+	private static final Color colorFillPolygons = new Color(64, 64, 64); 
+	private static final Color colorDrawPolygons = Color.white; 
+	private static final Color colorUnplayedImages = new Color(100, 255, 100);
+	private static final Color colorPlayedImages = Color.gray;
 	
 	private JButton jBtnExit;
+	private JButton jBtnChooseImages;
 	
-	private JButton jBtnSetImage;
+	private ArrayList<JLabel> jLblsImagesList;
+	
+	private JButton jBtnStartStopAutomatic;
 	private JButton jBtnMakeNextPolygonTransparent;
+	private JButton jBtnMakeAllPolygonsTransparent;
+	private JButton jBtnBackToList;
 	
 	private JLabel jLblImage;
 	
 	private BufferedImage image;
-	private ArrayList<MyPolygon> polygons;
+	private MyArrayList<MyPolygon> polygons;
+	private ArrayList<Vertex> vertices;
+	private ArrayList<Edge> edges;
 	
+	private File imageFolder;
+	private ArrayList<String> imagesAbsolutePaths;
+	
+	private boolean playing;
+	private boolean runningAutomatic;
 	private String pathToImage;
 	private int countTransparentPolygons;
+	
+	private int timeBetweenReveals = 1500;
+	private int thresholdForBorderProximity = 25;
+	private int minimumVertexDistance = 50;
+	private int thresholdForVertexProximity = 300;
+	private double minRelativeArea = 0.05;
+	private double maxRelativeArea = 0.15;
 	
 	public static void main(String[] args) {
 		SwingUtilities.invokeLater(new Runnable() {
@@ -59,7 +89,7 @@ public class DalliKlick extends JFrame {
 	}
 	
 	private void initGUI() {
-		setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+		setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 		getContentPane().setLayout(null);
 		
 		{
@@ -75,14 +105,27 @@ public class DalliKlick extends JFrame {
 			});
 		}
 		{
-			jBtnSetImage = new JButton();
-			getContentPane().add(jBtnSetImage);
-			jBtnSetImage.setBounds(REC_SET_IMAGE);
-			jBtnSetImage.setText("Bild anzeigen");
-			jBtnSetImage.setFocusable(false);
-			jBtnSetImage.addActionListener(new ActionListener() {
+			jBtnChooseImages = new JButton();
+			getContentPane().add(jBtnChooseImages);
+			jBtnChooseImages.setBounds(REC_CHOOSE_IMAGES);
+			jBtnChooseImages.setText("Bilder wählen");
+			jBtnChooseImages.setFocusable(false);
+			jBtnChooseImages.addActionListener(new ActionListener() {
 				public void actionPerformed(ActionEvent e) {
-					setImage();
+					chooseImages();
+				}
+			});
+		}
+		{
+			jBtnStartStopAutomatic = new JButton();
+			getContentPane().add(jBtnStartStopAutomatic);
+			jBtnStartStopAutomatic.setBounds(REC_CHOOSE_IMAGES);
+			jBtnStartStopAutomatic.setVisible(false);
+			jBtnStartStopAutomatic.setFocusable(false);
+			jBtnStartStopAutomatic.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					if (!runningAutomatic)	restartAutomatic();
+					else					pauseAutomatic();
 				}
 			});
 		}
@@ -100,6 +143,32 @@ public class DalliKlick extends JFrame {
 			});
 		}
 		{
+			jBtnMakeAllPolygonsTransparent = new JButton();
+			getContentPane().add(jBtnMakeAllPolygonsTransparent);
+			jBtnMakeAllPolygonsTransparent.setBounds(REC_ALL_POLYGONS_TRANSPARENT);
+			jBtnMakeAllPolygonsTransparent.setText("Alle Polygone aufdecken");
+			jBtnMakeAllPolygonsTransparent.setFocusable(false);
+			jBtnMakeAllPolygonsTransparent.setVisible(false);
+			jBtnMakeAllPolygonsTransparent.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					makeAllPolygonsTransparent();
+				}
+			});
+		}
+		{
+			jBtnBackToList = new JButton();
+			getContentPane().add(jBtnBackToList);
+			jBtnBackToList.setBounds(REC_BACK_TO_LIST);
+			jBtnBackToList.setText("zurück zur Liste");
+			jBtnBackToList.setFocusable(false);
+			jBtnBackToList.setVisible(false);
+			jBtnBackToList.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					backToList();
+				}
+			});
+		}
+		{
 			jLblImage = new JLabel();
 			getContentPane().add(jLblImage);
 		}
@@ -110,61 +179,373 @@ public class DalliKlick extends JFrame {
 		setResizable(false);
 	}
 	
-	private void setImage() {
-		pathToImage = "test-image.png";
+	private void chooseImages() {
+		JFileChooser jfc = new JFileChooser();
+		jfc.setCurrentDirectory(new File("."));
+		jfc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+		int state = jfc.showOpenDialog(null);
+		if (state == JFileChooser.APPROVE_OPTION) {
+			imageFolder = jfc.getSelectedFile();
+			loadImagesFromFolder();
+		}
+	}
+	
+	private void loadImagesFromFolder() {
+		if (!imageFolder.isDirectory())	return;
+		File[] listFiles = imageFolder.listFiles(new ImageFilenameFilter());
+		if (listFiles.length == 0)	return;
+		
+		imagesAbsolutePaths = new ArrayList<>();
+		for (File f : listFiles) {
+			imagesAbsolutePaths.add(f.getAbsolutePath());
+		}
+		
+		jBtnChooseImages.setVisible(false);
+		createListOfImages();
+	}
+	
+	private void createListOfImages() {
+		jLblsImagesList = new ArrayList<>();
+		for (int i = 0; i < imagesAbsolutePaths.size(); i++) {
+			final int x = i;
+			JLabel label = new JLabel();
+			getContentPane().add(label);
+			label.setBounds(100, 100 + i * 30, 800, 25);
+			label.setText("Bild " + (i + 1) + ": " + imagesAbsolutePaths.get(x));
+			label.addMouseListener(new MouseAdapter() {
+				public void mouseClicked(MouseEvent e) {
+					hideAll(jLblsImagesList);
+					jLblsImagesList.get(x).setBackground(colorPlayedImages);
+					setImage(imagesAbsolutePaths.get(x));
+				}
+			});
+			label.setCursor(handCursor);
+			label.setBackground(colorUnplayedImages);
+			label.setOpaque(true);
+			jLblsImagesList.add(label);
+		}
+	}
+	
+	private void setImage(String pathToImage) {
+		this.pathToImage = pathToImage;
 		image = loadImage(pathToImage);
-		polygons = createPolygons(image.getWidth(), image.getHeight());
+		vertices = getPolygonVertices(image.getWidth(), image.getHeight());
+		edges = getPolygonEdges(vertices, image.getWidth(), image.getHeight());
+		polygons = createTrianglesFromEdges(edges, image.getWidth(), image.getHeight());
+		combinePolygons(polygons, image.getWidth(), image.getHeight());
+		
 		countTransparentPolygons = 0;
 		showImageWithPolygons();
 		jBtnMakeNextPolygonTransparent.setVisible(true);
+		jBtnMakeAllPolygonsTransparent.setVisible(true);
+		jBtnStartStopAutomatic.setText("Start");
+		jBtnStartStopAutomatic.setVisible(true);
+		playing = true;
+		startAutomatic();
 	}
 	
-	private ArrayList<MyPolygon> createPolygons(int width, int height) {
-		ArrayList<MyPolygon> polygons = new ArrayList<>();
+	private void startAutomatic() {
+		Runnable r = new Runnable() {
+			public void run() {
+				while (playing) {
+					if (runningAutomatic) {
+						makeNextPolygonTransparent();
+					}
+					try {
+						Thread.sleep(timeBetweenReveals);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		};
 		
-		MyPolygon p;
-		p = new MyPolygon();
-		p.addPoint(0, 0);
-		p.addPoint(0, 300);
-		p.addPoint(50, 250);
-		p.addPoint(100, 100);
-		p.addPoint(50, 0);
+		Thread t = new Thread(r);
+		t.start();
+	}
+	
+	private void restartAutomatic() {
+		runningAutomatic = true;
+		jBtnStartStopAutomatic.setText("Pause");
+	}
+	
+	private void pauseAutomatic() {
+		runningAutomatic = false;
+		jBtnStartStopAutomatic.setText("Weiter");
+	}
+	
+	private ArrayList<Vertex> getPolygonVertices(int width, int height) {
+		ArrayList<Vertex> vertices = getPolygonBorderVertices(width, height);
 		
-		polygons.add(p);
+		int x = 0, y = 0, terminate = 0;
+		while (terminate < 50) {
+			boolean rejected = false;
+			x = (int) (Math.random() * width);
+			y = (int) (Math.random() * height);
+			if (x + thresholdForBorderProximity > width)	x = width - 1 - thresholdForBorderProximity;
+			else if (x < thresholdForBorderProximity)		x = thresholdForBorderProximity;
+			if (y + thresholdForBorderProximity > height)	y = height - 1 - thresholdForBorderProximity;
+			else if (y < thresholdForBorderProximity)		y = thresholdForBorderProximity;
+			Vertex vertex = new Vertex(x, y);
+			for (Vertex v : vertices) {
+				if (distance(vertex, v) < minimumVertexDistance) {
+					rejected = true;
+					break;
+				}
+			}
+			if (rejected)	terminate++;
+			else {
+				addVertex(vertices, vertex);
+				terminate = 0;
+			}
+		}
 		
-		p = new MyPolygon();
-		p.addPoint(100, 100);
-		p.addPoint(50, 250);
-		p.addPoint(250, 200);
-		p.addPoint(300, 125);
+		return vertices;
+	}
+	
+	private ArrayList<Vertex> getPolygonBorderVertices(int width, int height) {
+		ArrayList<Vertex> vertices = new ArrayList<>();
 		
-		polygons.add(p);
+		addVertex(vertices, new Vertex(0, 0));
+		addVertex(vertices, new Vertex(0, height - 1));
+		addVertex(vertices, new Vertex(width - 1, 0));
+		addVertex(vertices, new Vertex(width - 1, height - 1));
 		
-		p = new MyPolygon();
-		p.addPoint(50, 0);
-		p.addPoint(100, 100);
-		p.addPoint(300, 125);
-		p.addPoint(width - 1, 0);
+		// top
+		int x = 0, y = 0;
+		while (x < width) {
+			if (width - x < 3 * minimumVertexDistance) {
+				x = (x + width) / 2;
+				addVertex(vertices, new Vertex(x, y));
+				break;
+			}
+			x += minimumVertexDistance + minimumVertexDistance * Math.random();
+			addVertex(vertices, new Vertex(x, y));
+		}
 		
-		polygons.add(p);
+		// left
+		x = y = 0;
+		while (y < height) {
+			if (height - y < 3 * minimumVertexDistance) {
+				y = (y + height) / 2;
+				addVertex(vertices, new Vertex(x, y));
+				break;
+			}
+			y += minimumVertexDistance + minimumVertexDistance * Math.random();
+			addVertex(vertices, new Vertex(x, y));
+		}
 		
-		p = new MyPolygon();
-		p.addPoint(0, 300);
-		p.addPoint(0, height - 1);
-		p.addPoint(350, height - 1);
-		p.addPoint(250, 200);
-		p.addPoint(50, 250);
+		// bottom
+		x = 0;
+		y = height - 1;
+		while (x < width) {
+			if (width - x < 3 * minimumVertexDistance) {
+				x = (x + width) / 2;
+				addVertex(vertices, new Vertex(x, y));
+				break;
+			}
+			x += minimumVertexDistance + minimumVertexDistance * Math.random();
+			addVertex(vertices, new Vertex(x, y));
+		}
 		
-		polygons.add(p);
+		// right
+		x = width - 1;
+		y = 0;
+		while (y < height) {
+			if (height - y < 3 * minimumVertexDistance) {
+				y = (y + height) / 2;
+				addVertex(vertices, new Vertex(x, y));
+				break;
+			}
+			y += minimumVertexDistance + minimumVertexDistance * Math.random();
+			addVertex(vertices, new Vertex(x, y));
+		}
 		
-		p = new MyPolygon();
-		p.addPoint(width - 1, 0);
-		p.addPoint(300, 125);
-		p.addPoint(250, 200);
-		p.addPoint(350, height - 1);
-		p.addPoint(width - 1, height - 1);
+		return vertices;
+	}
+	
+	private ArrayList<Edge> getPolygonEdges(ArrayList<Vertex> vertices, int width, int height) {
+		ArrayList<Edge> edges = new ArrayList<>();
+		int lastX = width - 1, lastY =  height - 1;
 		
-		polygons.add(p);
+		for (int i = 0; i < vertices.size(); i++) {
+			for (int j = i + 1; j < vertices.size(); j++) {
+				if (distance(vertices.get(i), vertices.get(j)) < thresholdForVertexProximity)	edges.add(new Edge(vertices.get(i), vertices.get(j), lastX, lastY));
+			}
+		}
+		
+		
+		for (int i = 0; i < edges.size(); i++) {
+			boolean removeI = false;
+			for (int j = i + 1; j < edges.size() && !removeI; j++) {
+				if (intersect(edges.get(i), edges.get(j))) {
+					if (edges.get(i).length() > edges.get(j).length()) {
+						removeI = true;
+					} else {
+						edges.remove(j);
+						j--;
+					}
+				}
+			}
+			if (removeI) {
+				edges.remove(i);
+				i--;
+			}	
+		}
+		
+		return edges;
+	}
+	
+	private MyArrayList<MyPolygon> createTrianglesFromEdges(ArrayList<Edge> edges, int width, int height) {
+		MyArrayList<MyPolygon> triangles = new MyArrayList<>();
+		int lastX = width - 1, lastY =  height - 1;
+		
+		for (Edge edge : edges) {
+			edge.resetPolygons();
+		}
+		
+		while(true) {
+			boolean didSth = false;
+			for (Edge edge : edges) {
+				if (edge.numberOfMissingPolygons() == 0)	continue;
+				Vertex start = edge.getStart(), end = edge.getEnd();
+				ArrayList<Edge> edgesFromStart = getEdgesFrom(edges, start, end);
+				ArrayList<Edge> edgesFromEnd = getEdgesFrom(edges, end, start);
+				
+				for (Edge fromStart : edgesFromStart) {
+					for (Edge fromEnd : edgesFromEnd) {
+						if (fromStart.getOther(start).equals(fromEnd.getOther(end))) {
+							MyPolygon triangle = MyPolygon.newTriangle(start, end, fromStart.getOther(start));
+							
+							if (edge.checkNewPolygon(triangle) && fromStart.checkNewPolygon(triangle) && fromEnd.checkNewPolygon(triangle)) {
+								addPolygonAscending(triangles, triangle);
+								edge.addPolygon(triangle);
+								fromStart.addPolygon(triangle);
+								fromEnd.addPolygon(triangle);
+								didSth = true;
+							}
+						}
+						if (edge.numberOfMissingPolygons() == 0)	break;
+					}
+					if (edge.numberOfMissingPolygons() == 0)	break;
+				}
+			}
+			
+			if (!didSth)	break;
+		}
+		while(true) {
+			boolean didSth = false;
+			for (int i = 0; i < edges.size(); i++) {
+				Edge edge = edges.get(i);
+				if (edge.numberOfMissingPolygons() == 0)	continue;
+				Vertex start = edge.getStart(), end = edge.getEnd();
+				ArrayList<Edge> edgesFromEnd = getEdgesFrom(edges, end, start);
+				
+				for (Edge fromEnd : edgesFromEnd) {
+					Vertex other = fromEnd.getOther(end);
+					Edge newEdge = new Edge(start, other, lastX, lastY);
+					boolean duplicate = false;
+					for (Edge otherEdge : edges) {
+						if (duplicate = newEdge.equals(otherEdge)) {
+							newEdge = otherEdge;
+							break;
+						}
+					}
+					
+					boolean intersect = false;
+					for (Edge otherEdge : edges) {
+						if (intersect = intersect(newEdge, otherEdge))	break;
+					}
+					if (!intersect) {
+						if (!duplicate)	edges.add(newEdge);
+						MyPolygon triangle = MyPolygon.newTriangle(start, end, other);
+						
+						if (edge.checkNewPolygon(triangle) && newEdge.checkNewPolygon(triangle) && fromEnd.checkNewPolygon(triangle)) {
+							addPolygonAscending(triangles, triangle);
+							edge.addPolygon(triangle);
+							newEdge.addPolygon(triangle);
+							fromEnd.addPolygon(triangle);
+							didSth = true;
+						}
+					}
+					
+					if (edge.numberOfMissingPolygons() == 0)	break;
+				}
+			}
+			
+			if (!didSth)	break;
+		}
+		
+		return triangles;
+	}
+	
+	private ArrayList<Edge> getEdgesFrom(ArrayList<Edge> edges, Vertex from, Vertex excludeTo) {
+		ArrayList<Edge> edgesFrom = new ArrayList<>();
+		
+		for (Edge edge : edges) {
+			if (!edge.missesPolygon())	continue;
+			if ((edge.getStart().equals(from) && !edge.getEnd().equals(excludeTo))
+					|| (edge.getEnd().equals(from) && !edge.getStart().equals(excludeTo)))	edgesFrom.add(edge);
+		}
+		
+		return edgesFrom;
+	}
+	
+	private ArrayList<MyPolygon> combinePolygons(ArrayList<MyPolygon> polygons, int width, int height) {
+		double minArea = minRelativeArea * width * height;
+		double maxArea = maxRelativeArea * width * height;
+		
+		while(polygons.get(0).getArea() < minArea) {
+			boolean didSth = false;
+			
+			MyPolygon polygon = polygons.get(0);
+			ArrayList<MyPolygon> neighbouringPolygons = polygon.getNeighbours();
+			ArrayList<MyPolygon> combinedPolygons = new ArrayList<>();
+			for (int i = 0; i < neighbouringPolygons.size(); i++) {
+				MyPolygon combined = MyPolygon.combine(polygon, neighbouringPolygons.get(i));
+				combinedPolygons.add(combined.getArea() < maxArea ? combined : null);
+			}
+			
+			int indexOfSelectedCombinedPolygon = -1;
+			boolean foundConvexCombinedPolygon = false;
+			double sizeOfSelectedCombinedPolygon = maxArea;
+			for (int i = 0; i < combinedPolygons.size(); i++) {
+				if (combinedPolygons.get(i) == null)	continue;
+				MyPolygon combined = combinedPolygons.get(i);
+				if (foundConvexCombinedPolygon) {
+					if (combined.isConvex() && combined.getArea() < sizeOfSelectedCombinedPolygon) {
+						indexOfSelectedCombinedPolygon = i;
+						foundConvexCombinedPolygon = combinedPolygons.get(indexOfSelectedCombinedPolygon).isConvex();
+						sizeOfSelectedCombinedPolygon = combinedPolygons.get(indexOfSelectedCombinedPolygon).getArea();
+					}
+				} else {
+					if (combined.isConvex() || combined.getArea() < sizeOfSelectedCombinedPolygon) {
+						indexOfSelectedCombinedPolygon = i;
+						foundConvexCombinedPolygon = combinedPolygons.get(indexOfSelectedCombinedPolygon).isConvex();
+						sizeOfSelectedCombinedPolygon = combinedPolygons.get(indexOfSelectedCombinedPolygon).getArea();
+					}
+				}
+			}
+			
+			if (indexOfSelectedCombinedPolygon != -1) {
+				MyPolygon selectedNeighbour = neighbouringPolygons.get(indexOfSelectedCombinedPolygon);
+				MyPolygon newPolygon = combinedPolygons.get(indexOfSelectedCombinedPolygon);
+				
+				for (MyPolygon neighbour : newPolygon.getNeighbours()) {
+					neighbour.replaceEitherNeighbour(polygon, selectedNeighbour, newPolygon);
+				}
+				
+				polygons.remove(polygon);
+				polygon.setActive(false);
+				polygons.remove(selectedNeighbour);
+				selectedNeighbour.setActive(false);
+				addPolygonAscending(polygons, newPolygon);
+				
+				didSth = true;
+			}
+			
+			if (!didSth)	break;
+		}
 		
 		return polygons;
 	}
@@ -175,35 +556,20 @@ public class DalliKlick extends JFrame {
 		displayImage();
 	}
 	
-	private void makeNextPolygonTransparent() {
-		if (countTransparentPolygons < polygons.size()) {
-			int nextPolygonToMakeTransparent = (int) (Math.random() * polygons.size());
-			while (polygons.get(nextPolygonToMakeTransparent).isTransparent()) {
-				nextPolygonToMakeTransparent = (nextPolygonToMakeTransparent + 1) % polygons.size();
-			}
-			polygons.get(nextPolygonToMakeTransparent).setTransparent();
-			
-			countTransparentPolygons++;
-			
-			showImageWithPolygons();
-			if (countTransparentPolygons == polygons.size()) {
-				jBtnMakeNextPolygonTransparent.setVisible(false);
-			}
-		}
-	}
-	
 	private void drawPolygons(BufferedImage image) {
 		Graphics2D g2d = image.createGraphics();
 		 
-		g2d.setColor(Color.cyan);
+		g2d.setColor(colorFillPolygons);
 		for (MyPolygon p : polygons) {
 			if (p.isTransparent())	continue;
 			g2d.fillPolygon(p);
 		}
 		
-		g2d.setColor(Color.black);
-		for (Polygon p : polygons) {
-			g2d.drawPolygon(p);
+		if (countTransparentPolygons != polygons.size()) {
+			g2d.setColor(colorDrawPolygons);
+			for (Polygon p : polygons) {
+				g2d.drawPolygon(p);
+			}
 		}
 		
 		g2d.dispose();
@@ -216,6 +582,46 @@ public class DalliKlick extends JFrame {
 		getContentPane().add(jLblImage);
 		jLblImage.setBounds(20, 70, image.getWidth(), image.getHeight());
 		jLblImage.setVisible(true);
+	}
+	
+	private void makeNextPolygonTransparent() {
+		if (countTransparentPolygons < polygons.size()) {
+			int nextPolygonToMakeTransparent = (int) (Math.random() * polygons.size());
+			while (polygons.get(nextPolygonToMakeTransparent).isTransparent()) {
+				nextPolygonToMakeTransparent++;
+			}
+			polygons.get(nextPolygonToMakeTransparent).setTransparent();
+			
+			countTransparentPolygons++;
+			
+			showImageWithPolygons();
+			finishRound();
+		}
+	}
+	
+	private void makeAllPolygonsTransparent() {
+		for (int i = 0; i < polygons.size(); i++) {
+			polygons.get(i).setTransparent();
+		}
+		countTransparentPolygons = polygons.size();
+		
+		showImageWithPolygons();
+		finishRound();
+	}
+	
+	private void finishRound() {
+		if (countTransparentPolygons != polygons.size())	return;
+		playing = false;
+		jBtnStartStopAutomatic.setVisible(false);
+		jBtnMakeNextPolygonTransparent.setVisible(false);
+		jBtnMakeAllPolygonsTransparent.setVisible(false);
+		jBtnBackToList.setVisible(true);
+	}
+	
+	private void backToList() {
+		jBtnBackToList.setVisible(false);
+		jLblImage.setVisible(false);
+		showAll(jLblsImagesList);
 	}
 	
 	private void exit() {
