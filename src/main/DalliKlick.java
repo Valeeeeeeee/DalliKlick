@@ -32,7 +32,7 @@ public class DalliKlick extends JFrame {
 	private static final long serialVersionUID = -6343140590992485359L;
 	
 	private static int WIDTH = 1400;
-	private static int HEIGHT = 850;
+	private static int HEIGHT = 800;
 	
 	private static final int windowDecorationHeight = 22;
 	private static final int heightOfButtons = 60;
@@ -160,7 +160,7 @@ public class DalliKlick extends JFrame {
 			jBtnMakeNextPolygonTransparent = new JButton();
 			getContentPane().add(jBtnMakeNextPolygonTransparent);
 			jBtnMakeNextPolygonTransparent.setBounds(REC_NEXT_POLYGON_TRANSPARENT);
-			jBtnMakeNextPolygonTransparent.setText("Polygon aufdecken");
+			jBtnMakeNextPolygonTransparent.setText("Aufdecken");
 			jBtnMakeNextPolygonTransparent.setFocusable(false);
 			jBtnMakeNextPolygonTransparent.setVisible(false);
 			jBtnMakeNextPolygonTransparent.addActionListener(new ActionListener() {
