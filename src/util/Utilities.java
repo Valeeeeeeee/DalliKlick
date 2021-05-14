@@ -1,13 +1,17 @@
 package util;
 
 import java.awt.Cursor;
+import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.List;
 
 import javax.imageio.ImageIO;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.SwingConstants;
 
 import main.Edge;
 import main.MyArrayList;
@@ -155,6 +159,10 @@ public class Utilities {
 		return Math.abs(getDeterminant(v1, v2, v3)) * 1.0 / 2;
 	}
 	
+	public static void alignCenter(JLabel label) {
+		label.setHorizontalAlignment(SwingConstants.CENTER);
+	}
+	
 	public static void showAll(List<?> list) {
 		for (int i = 0; i < list.size(); i++) {
 			if (!(list.get(i) instanceof JComponent))	continue;
@@ -181,5 +189,20 @@ public class Utilities {
 		}
 		
 		return bImage;
+	}
+	
+	public static BufferedImage resizeImage(BufferedImage image, int maxWidth, int maxHeight) {
+		double factor = Math.min((double) maxWidth / image.getWidth(), (double) maxHeight / image.getHeight());
+		int width = (int) (image.getWidth() * factor), height = (int) (image.getHeight() * factor);
+		BufferedImage resizedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g = resizedImage.createGraphics();
+
+		g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+		g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+		
+		g.drawImage(image, 0, 0, width, height, null);
+		g.dispose();
+		
+		return resizedImage;
 	}
 }

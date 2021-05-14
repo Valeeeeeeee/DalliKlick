@@ -1,7 +1,9 @@
 package main;
 
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
@@ -17,6 +19,9 @@ import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 
@@ -26,14 +31,29 @@ public class DalliKlick extends JFrame {
 	
 	private static final long serialVersionUID = -6343140590992485359L;
 	
-	private static final int WIDTH = 1000;
-	private static final int HEIGHT = 800;
+	private static int WIDTH = 1400;
+	private static int HEIGHT = 850;
+	
+	private static final int windowDecorationHeight = 22;
+	private static final int heightOfButtons = 60;
+	private static final int margin = 20;
+	private static int maxWidthOfImage = WIDTH - 2 * margin;
+	private static int maxHeightOfImage = HEIGHT - windowDecorationHeight - 2 * margin - heightOfButtons;
+	
+	private static final int widthOfImageLabel = 150;
+	private static final int heightOfImageLabel = 30;
+	private static final int gapBetweenImageLabels = 10;
+	private static final int widthOfScrollBar = 20;
 	
 	private static final Rectangle REC_EXIT = new Rectangle(20, 20, 150, 40);
-	private static final Rectangle REC_CHOOSE_IMAGES = new Rectangle(200, 20, 200, 40);
-	private static final Rectangle REC_NEXT_POLYGON_TRANSPARENT = new Rectangle(430, 20, 200, 40);
-	private static final Rectangle REC_ALL_POLYGONS_TRANSPARENT = new Rectangle(650, 20, 200, 40);
-	private static final Rectangle REC_BACK_TO_LIST = new Rectangle(430, 20, 200, 40);
+	private static final Rectangle REC_CHOOSE_IMAGES = new Rectangle(190, 20, 150, 40);
+	private static final Rectangle REC_START_STOP_AUTOMATIC = new Rectangle(190, 20, 150, 40);
+	private static final Rectangle REC_NEXT_POLYGON_TRANSPARENT = new Rectangle(360, 20, 150, 40);
+	private static final Rectangle REC_ALL_POLYGONS_TRANSPARENT = new Rectangle(530, 20, 150, 40);
+	private static final Rectangle REC_BACK_TO_LIST = new Rectangle(190, 20, 150, 40);
+	private static final Rectangle REC_POINTS = new Rectangle(900, 10, 300, 60);
+	
+	private static final Point locationImagesList = new Point(margin, heightOfButtons + margin);
 	
 	private static final Color colorFillPolygons = new Color(64, 64, 64); 
 	private static final Color colorDrawPolygons = Color.white; 
@@ -43,12 +63,16 @@ public class DalliKlick extends JFrame {
 	private JButton jBtnExit;
 	private JButton jBtnChooseImages;
 	
+	private JScrollPane jSPImages;
+	private JPanel jPnlImages;
 	private ArrayList<JLabel> jLblsImagesList;
 	
 	private JButton jBtnStartStopAutomatic;
 	private JButton jBtnMakeNextPolygonTransparent;
 	private JButton jBtnMakeAllPolygonsTransparent;
 	private JButton jBtnBackToList;
+	
+	private JLabel jLblPoints;
 	
 	private JLabel jLblImage;
 	
@@ -59,18 +83,21 @@ public class DalliKlick extends JFrame {
 	
 	private File imageFolder;
 	private ArrayList<String> imagesAbsolutePaths;
+	private boolean[] played;
 	
 	private boolean playing;
 	private boolean runningAutomatic;
 	private String pathToImage;
 	private int countTransparentPolygons;
+	private double revealedRelativeArea;
 	
-	private int timeBetweenReveals = 1500;
+	private int timeBetweenReveals = 2500;
 	private int thresholdForBorderProximity = 25;
 	private int minimumVertexDistance = 50;
 	private int thresholdForVertexProximity = 300;
-	private double minRelativeArea = 0.05;
-	private double maxRelativeArea = 0.15;
+	private double minRelativeArea = 0.04;
+	private double maxRelativeArea = 0.10;
+	private double thresholdForFullPoints = 0.15;
 	
 	public static void main(String[] args) {
 		SwingUtilities.invokeLater(new Runnable() {
@@ -119,7 +146,7 @@ public class DalliKlick extends JFrame {
 		{
 			jBtnStartStopAutomatic = new JButton();
 			getContentPane().add(jBtnStartStopAutomatic);
-			jBtnStartStopAutomatic.setBounds(REC_CHOOSE_IMAGES);
+			jBtnStartStopAutomatic.setBounds(REC_START_STOP_AUTOMATIC);
 			jBtnStartStopAutomatic.setVisible(false);
 			jBtnStartStopAutomatic.setFocusable(false);
 			jBtnStartStopAutomatic.addActionListener(new ActionListener() {
@@ -146,7 +173,7 @@ public class DalliKlick extends JFrame {
 			jBtnMakeAllPolygonsTransparent = new JButton();
 			getContentPane().add(jBtnMakeAllPolygonsTransparent);
 			jBtnMakeAllPolygonsTransparent.setBounds(REC_ALL_POLYGONS_TRANSPARENT);
-			jBtnMakeAllPolygonsTransparent.setText("Alle Polygone aufdecken");
+			jBtnMakeAllPolygonsTransparent.setText("Alle aufdecken");
 			jBtnMakeAllPolygonsTransparent.setFocusable(false);
 			jBtnMakeAllPolygonsTransparent.setVisible(false);
 			jBtnMakeAllPolygonsTransparent.addActionListener(new ActionListener() {
@@ -169,6 +196,24 @@ public class DalliKlick extends JFrame {
 			});
 		}
 		{
+			jLblPoints = new JLabel();
+			getContentPane().add(jLblPoints);
+			jLblPoints.setBounds(REC_POINTS);
+			jLblPoints.setFont(jLblPoints.getFont().deriveFont((float) 30.0));
+			jLblPoints.setVisible(false);
+		}
+		{
+			jSPImages = new JScrollPane();
+			getContentPane().add(jSPImages);
+			jSPImages.getVerticalScrollBar().setUnitIncrement(20);
+			jSPImages.setBorder(null);
+			jSPImages.setLocation(locationImagesList);
+		}
+		{
+			jPnlImages = new JPanel();
+			jPnlImages.setLayout(null);
+		}
+		{
 			jLblImage = new JLabel();
 			getContentPane().add(jLblImage);
 		}
@@ -176,10 +221,22 @@ public class DalliKlick extends JFrame {
 		pack();
 		setTitle("Dalli Klick");
 		setSize(WIDTH, HEIGHT);
-		setResizable(false);
 	}
 	
 	private void chooseImages() {
+		boolean unplayedImage = false;
+		if (played != null) {
+			for (int i = 0; i < played.length; i++) {
+				unplayedImage = unplayedImage || !played[i];
+			}
+		}
+		if (unplayedImage && JOptionPane.showConfirmDialog(null, "Du hast noch ungespielte Bilder. Willst du wirklich fortfahren?", "", JOptionPane.YES_NO_OPTION) == JOptionPane.NO_OPTION) {
+			return;
+		}
+		if (jLblsImagesList != null) {
+			hideAll(jLblsImagesList);
+		}
+		
 		JFileChooser jfc = new JFileChooser();
 		jfc.setCurrentDirectory(new File("."));
 		jfc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -199,8 +256,8 @@ public class DalliKlick extends JFrame {
 		for (File f : listFiles) {
 			imagesAbsolutePaths.add(f.getAbsolutePath());
 		}
+		played = new boolean[listFiles.length];
 		
-		jBtnChooseImages.setVisible(false);
 		createListOfImages();
 	}
 	
@@ -209,13 +266,16 @@ public class DalliKlick extends JFrame {
 		for (int i = 0; i < imagesAbsolutePaths.size(); i++) {
 			final int x = i;
 			JLabel label = new JLabel();
-			getContentPane().add(label);
-			label.setBounds(100, 100 + i * 30, 800, 25);
-			label.setText("Bild " + (i + 1) + ": " + imagesAbsolutePaths.get(x));
+			jPnlImages.add(label);
+			alignCenter(label);
+			label.setBounds(0, i * (heightOfImageLabel + gapBetweenImageLabels), widthOfImageLabel, heightOfImageLabel);
+			label.setText("Bild " + (i + 1));
 			label.addMouseListener(new MouseAdapter() {
 				public void mouseClicked(MouseEvent e) {
-					hideAll(jLblsImagesList);
+					played[x] = true;
+					jBtnChooseImages.setVisible(false);
 					jLblsImagesList.get(x).setBackground(colorPlayedImages);
+					jSPImages.setVisible(false);
 					setImage(imagesAbsolutePaths.get(x));
 				}
 			});
@@ -224,22 +284,29 @@ public class DalliKlick extends JFrame {
 			label.setOpaque(true);
 			jLblsImagesList.add(label);
 		}
+		
+		jPnlImages.setPreferredSize(new Dimension(widthOfImageLabel, imagesAbsolutePaths.size() * (heightOfImageLabel + gapBetweenImageLabels)));
+		jSPImages.setViewportView(jPnlImages);
+		jSPImages.setSize(new Dimension(widthOfImageLabel + widthOfScrollBar, Math.min(imagesAbsolutePaths.size() * (heightOfImageLabel + gapBetweenImageLabels), maxHeightOfImage)));
 	}
 	
 	private void setImage(String pathToImage) {
 		this.pathToImage = pathToImage;
-		image = loadImage(pathToImage);
+		image = resizeImage(loadImage(pathToImage), maxWidthOfImage, maxHeightOfImage);
 		vertices = getPolygonVertices(image.getWidth(), image.getHeight());
 		edges = getPolygonEdges(vertices, image.getWidth(), image.getHeight());
 		polygons = createTrianglesFromEdges(edges, image.getWidth(), image.getHeight());
 		combinePolygons(polygons, image.getWidth(), image.getHeight());
 		
+		revealedRelativeArea = 0.0;
 		countTransparentPolygons = 0;
 		showImageWithPolygons();
 		jBtnMakeNextPolygonTransparent.setVisible(true);
 		jBtnMakeAllPolygonsTransparent.setVisible(true);
 		jBtnStartStopAutomatic.setText("Start");
 		jBtnStartStopAutomatic.setVisible(true);
+		jLblPoints.setText("200,0 Punkte");
+		jLblPoints.setVisible(true);
 		playing = true;
 		startAutomatic();
 	}
@@ -551,7 +618,7 @@ public class DalliKlick extends JFrame {
 	}
 	
 	private void showImageWithPolygons() {
-		image = loadImage(pathToImage);
+		image = resizeImage(loadImage(pathToImage), maxWidthOfImage, maxHeightOfImage);
 		drawPolygons(image);
 		displayImage();
 	}
@@ -580,7 +647,8 @@ public class DalliKlick extends JFrame {
 	
 		jLblImage = new JLabel(new ImageIcon(image));
 		getContentPane().add(jLblImage);
-		jLblImage.setBounds(20, 70, image.getWidth(), image.getHeight());
+		int width = image.getWidth(), height = image.getHeight();
+		jLblImage.setBounds((WIDTH - width) / 2, heightOfButtons + (HEIGHT - windowDecorationHeight - height - heightOfButtons) / 2, width, height);
 		jLblImage.setVisible(true);
 	}
 	
@@ -592,11 +660,23 @@ public class DalliKlick extends JFrame {
 			}
 			polygons.get(nextPolygonToMakeTransparent).setTransparent();
 			
+			revealedRelativeArea += polygons.get(nextPolygonToMakeTransparent).getArea() / ((image.getWidth() - 1) * (image.getHeight() - 1));
+			
 			countTransparentPolygons++;
 			
+			jLblPoints.setText(getPoints() + " Punkte");
 			showImageWithPolygons();
 			finishRound();
 		}
+	}
+	
+	private String getPoints() {
+		int points = (int) Math.round(200 * Math.exp(-Math.log(20)*(revealedRelativeArea - thresholdForFullPoints) / (1 - thresholdForFullPoints)));
+		
+		if (revealedRelativeArea <= thresholdForFullPoints)	points = 200;
+		points = (points + 2) / 5 * 5;
+		
+		return String.format("%d,%d", points / 10, points % 10);
 	}
 	
 	private void makeAllPolygonsTransparent() {
@@ -611,7 +691,7 @@ public class DalliKlick extends JFrame {
 	
 	private void finishRound() {
 		if (countTransparentPolygons != polygons.size())	return;
-		playing = false;
+		playing = runningAutomatic = false;
 		jBtnStartStopAutomatic.setVisible(false);
 		jBtnMakeNextPolygonTransparent.setVisible(false);
 		jBtnMakeAllPolygonsTransparent.setVisible(false);
@@ -620,8 +700,10 @@ public class DalliKlick extends JFrame {
 	
 	private void backToList() {
 		jBtnBackToList.setVisible(false);
+		jLblPoints.setVisible(false);
 		jLblImage.setVisible(false);
-		showAll(jLblsImagesList);
+		jBtnChooseImages.setVisible(true);
+		jSPImages.setVisible(true);
 	}
 	
 	private void exit() {
