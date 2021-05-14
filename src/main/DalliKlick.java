@@ -233,6 +233,11 @@ public class DalliKlick extends JFrame {
 		if (unplayedImage && JOptionPane.showConfirmDialog(null, "Du hast noch ungespielte Bilder. Willst du wirklich fortfahren?", "", JOptionPane.YES_NO_OPTION) == JOptionPane.NO_OPTION) {
 			return;
 		}
+		if (played != null) {
+			for (int i = 0; i < played.length; i++) {
+				played[i] = true;
+			}
+		}
 		if (jLblsImagesList != null) {
 			hideAll(jLblsImagesList);
 		}
