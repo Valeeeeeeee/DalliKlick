@@ -8,6 +8,8 @@ import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
@@ -119,6 +121,12 @@ public class DalliKlick extends JFrame {
 		setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 		getContentPane().setLayout(null);
 		
+		addKeyListener(new KeyAdapter() {
+			public void keyPressed(KeyEvent e) {
+				pressed(e.getKeyCode());
+			}
+		});
+		
 		{
 			jBtnExit = new JButton();
 			getContentPane().add(jBtnExit);
@@ -151,8 +159,7 @@ public class DalliKlick extends JFrame {
 			jBtnStartStopAutomatic.setFocusable(false);
 			jBtnStartStopAutomatic.addActionListener(new ActionListener() {
 				public void actionPerformed(ActionEvent e) {
-					if (!runningAutomatic)	restartAutomatic();
-					else					pauseAutomatic();
+					toggleAutomatic();
 				}
 			});
 		}
@@ -221,6 +228,28 @@ public class DalliKlick extends JFrame {
 		pack();
 		setTitle("Dalli Klick");
 		setSize(WIDTH, HEIGHT);
+	}
+	
+	private void pressed(int keyCode) {
+		switch (keyCode) {
+		case KeyEvent.VK_SPACE:
+			toggleAutomatic();
+			break;
+		case KeyEvent.VK_RIGHT:
+			makeNextPolygonTransparent();
+			break;
+		case KeyEvent.VK_BACK_SPACE:
+			backToList();
+			break;
+		default:
+			log("keyCode = " + keyCode);
+			break;
+		}
+	}
+	
+	private void toggleAutomatic() {
+		if (runningAutomatic)	pauseAutomatic();
+		else					restartAutomatic();
 	}
 	
 	private void chooseImages() {
