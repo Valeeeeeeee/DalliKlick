@@ -306,11 +306,7 @@ public class DalliKlick extends JFrame {
 			label.setText("Bild " + (i + 1));
 			label.addMouseListener(new MouseAdapter() {
 				public void mouseClicked(MouseEvent e) {
-					played[x] = true;
-					jBtnChooseImages.setVisible(false);
-					jLblsImagesList.get(x).setBackground(colorPlayedImages);
-					jSPImages.setVisible(false);
-					setImage(imagesAbsolutePaths.get(x));
+					labelClicked(x);
 				}
 			});
 			label.setCursor(handCursor);
@@ -324,13 +320,38 @@ public class DalliKlick extends JFrame {
 		jSPImages.setSize(new Dimension(widthOfImageLabel + widthOfScrollBar, Math.min(imagesAbsolutePaths.size() * (heightOfImageLabel + gapBetweenImageLabels), maxHeightOfImage)));
 	}
 	
-	private void setImage(String pathToImage) {
+	private void labelClicked(int index) {
+		boolean success = setImage(imagesAbsolutePaths.get(index));
+		if (!success) {
+			JOptionPane.showMessageDialog(null, "Es scheint ein Problem mit der Berechnung der Polygone zu geben. Probier es doch einfach nochmal!");
+			return;
+		}
+		played[index] = true;
+		jBtnChooseImages.setVisible(false);
+		jLblsImagesList.get(index).setBackground(colorPlayedImages);
+		jSPImages.setVisible(false);
+	}
+	
+	private boolean setImage(String pathToImage) {
 		this.pathToImage = pathToImage;
 		image = resizeImage(loadImage(pathToImage), maxWidthOfImage, maxHeightOfImage);
-		vertices = getPolygonVertices(image.getWidth(), image.getHeight());
-		edges = getPolygonEdges(vertices, image.getWidth(), image.getHeight());
-		polygons = createTrianglesFromEdges(edges, image.getWidth(), image.getHeight());
-		combinePolygons(polygons, image.getWidth(), image.getHeight());
+		
+		int unsuccessfulTries = 0;
+		boolean success = false;
+		while (!success && unsuccessfulTries < 20) {
+			try {
+				vertices = getPolygonVertices(image.getWidth(), image.getHeight());
+				edges = getPolygonEdges(vertices, image.getWidth(), image.getHeight());
+				polygons = createTrianglesFromEdges(edges, image.getWidth(), image.getHeight());
+				combinePolygons(polygons, image.getWidth(), image.getHeight());
+				success = true;
+			} catch (NullPointerException e) {
+				e.printStackTrace();
+				unsuccessfulTries++;
+			}
+		}
+		
+		if (unsuccessfulTries == 20)	return false;
 		
 		revealedRelativeArea = 0.0;
 		countTransparentPolygons = 0;
@@ -343,6 +364,7 @@ public class DalliKlick extends JFrame {
 		jLblPoints.setVisible(true);
 		playing = true;
 		startAutomatic();
+		return true;
 	}
 	
 	private void startAutomatic() {
