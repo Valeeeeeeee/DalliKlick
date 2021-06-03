@@ -53,6 +53,7 @@ public class DalliKlick extends JFrame {
 	private static final Rectangle REC_NEXT_POLYGON_TRANSPARENT = new Rectangle(360, 20, 150, 40);
 	private static final Rectangle REC_ALL_POLYGONS_TRANSPARENT = new Rectangle(530, 20, 150, 40);
 	private static final Rectangle REC_BACK_TO_LIST = new Rectangle(190, 20, 150, 40);
+	private static final Rectangle REC_HASHED = new Rectangle(700, 20, 180, 40);
 	private static final Rectangle REC_POINTS = new Rectangle(900, 10, 300, 60);
 	
 	private static final Point locationImagesList = new Point(margin, heightOfButtons + margin);
@@ -74,6 +75,7 @@ public class DalliKlick extends JFrame {
 	private JButton jBtnMakeAllPolygonsTransparent;
 	private JButton jBtnBackToList;
 	
+	private JLabel jLblHashedFileName;
 	private JLabel jLblPoints;
 	
 	private JLabel jLblImage;
@@ -84,12 +86,13 @@ public class DalliKlick extends JFrame {
 	private ArrayList<Edge> edges;
 	
 	private File imageFolder;
-	private ArrayList<String> imagesAbsolutePaths;
+	private int numberOfImages;
+	private ArrayList<ImagePath> imagePaths;
 	private boolean[] played;
 	
 	private boolean playing;
 	private boolean runningAutomatic;
-	private String pathToImage;
+	private ImagePath imagePath;
 	private int countTransparentPolygons;
 	private double revealedRelativeArea;
 	
@@ -203,6 +206,13 @@ public class DalliKlick extends JFrame {
 			});
 		}
 		{
+			jLblHashedFileName = new JLabel();
+			getContentPane().add(jLblHashedFileName);
+			alignCenter(jLblHashedFileName);
+			jLblHashedFileName.setBounds(REC_HASHED);
+			jLblHashedFileName.setVisible(false);
+		}
+		{
 			jLblPoints = new JLabel();
 			getContentPane().add(jLblPoints);
 			jLblPoints.setBounds(REC_POINTS);
@@ -286,18 +296,19 @@ public class DalliKlick extends JFrame {
 		File[] listFiles = imageFolder.listFiles(new ImageFilenameFilter());
 		if (listFiles.length == 0)	return;
 		
-		imagesAbsolutePaths = new ArrayList<>();
+		imagePaths = new ArrayList<>();
 		for (File f : listFiles) {
-			imagesAbsolutePaths.add(f.getAbsolutePath());
+			imagePaths.add(new ImagePath(f.getAbsolutePath()));
 		}
-		played = new boolean[listFiles.length];
+		numberOfImages = imagePaths.size();
+		played = new boolean[numberOfImages];
 		
 		createListOfImages();
 	}
 	
 	private void createListOfImages() {
 		jLblsImagesList = new ArrayList<>();
-		for (int i = 0; i < imagesAbsolutePaths.size(); i++) {
+		for (int i = 0; i < numberOfImages; i++) {
 			final int x = i;
 			JLabel label = new JLabel();
 			jPnlImages.add(label);
@@ -315,13 +326,13 @@ public class DalliKlick extends JFrame {
 			jLblsImagesList.add(label);
 		}
 		
-		jPnlImages.setPreferredSize(new Dimension(widthOfImageLabel, imagesAbsolutePaths.size() * (heightOfImageLabel + gapBetweenImageLabels)));
+		jPnlImages.setPreferredSize(new Dimension(widthOfImageLabel, numberOfImages * (heightOfImageLabel + gapBetweenImageLabels)));
 		jSPImages.setViewportView(jPnlImages);
-		jSPImages.setSize(new Dimension(widthOfImageLabel + widthOfScrollBar, Math.min(imagesAbsolutePaths.size() * (heightOfImageLabel + gapBetweenImageLabels), maxHeightOfImage)));
+		jSPImages.setSize(new Dimension(widthOfImageLabel + widthOfScrollBar, Math.min(numberOfImages * (heightOfImageLabel + gapBetweenImageLabels), maxHeightOfImage)));
 	}
 	
 	private void labelClicked(int index) {
-		boolean success = setImage(imagesAbsolutePaths.get(index));
+		boolean success = setImage(imagePaths.get(index));
 		if (!success) {
 			JOptionPane.showMessageDialog(null, "Es scheint ein Problem mit der Berechnung der Polygone zu geben. Probier es doch einfach nochmal!");
 			return;
@@ -332,9 +343,9 @@ public class DalliKlick extends JFrame {
 		jSPImages.setVisible(false);
 	}
 	
-	private boolean setImage(String pathToImage) {
-		this.pathToImage = pathToImage;
-		image = resizeImage(loadImage(pathToImage), maxWidthOfImage, maxHeightOfImage);
+	private boolean setImage(ImagePath imagePath) {
+		this.imagePath = imagePath;
+		image = resizeImage(loadImage(imagePath.getAbsolutePath()), maxWidthOfImage, maxHeightOfImage);
 		
 		int unsuccessfulTries = 0;
 		boolean success = false;
@@ -360,7 +371,9 @@ public class DalliKlick extends JFrame {
 		jBtnMakeAllPolygonsTransparent.setVisible(true);
 		jBtnStartStopAutomatic.setText("Start");
 		jBtnStartStopAutomatic.setVisible(true);
-		jLblPoints.setText("200,0 Punkte");
+		jLblHashedFileName.setText(imagePath.getHashedFileName());
+		jLblHashedFileName.setVisible(true);
+		jLblPoints.setText("50,0 Punkte");
 		jLblPoints.setVisible(true);
 		playing = true;
 		startAutomatic();
@@ -674,7 +687,7 @@ public class DalliKlick extends JFrame {
 	}
 	
 	private void showImageWithPolygons() {
-		image = resizeImage(loadImage(pathToImage), maxWidthOfImage, maxHeightOfImage);
+		image = resizeImage(loadImage(imagePath.getAbsolutePath()), maxWidthOfImage, maxHeightOfImage);
 		drawPolygons(image);
 		displayImage();
 	}
@@ -752,10 +765,12 @@ public class DalliKlick extends JFrame {
 		jBtnMakeNextPolygonTransparent.setVisible(false);
 		jBtnMakeAllPolygonsTransparent.setVisible(false);
 		jBtnBackToList.setVisible(true);
+		jLblHashedFileName.setText(imagePath.getFileName());
 	}
 	
 	private void backToList() {
 		jBtnBackToList.setVisible(false);
+		jLblHashedFileName.setVisible(false);
 		jLblPoints.setVisible(false);
 		jLblImage.setVisible(false);
 		jBtnChooseImages.setVisible(true);
